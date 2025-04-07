@@ -1,0 +1,4 @@
+# Requirements for this project
+# Install the required packages using pip
+opencv-python
+numpy
