@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import os
 
-def show_imags(img_array, img_names, img_display_size=(640, 480)):
+def show_images(img_array, img_names, img_display_size=(640, 480)):
     i = 0
     for img in img_array:
         name = img_names[i]

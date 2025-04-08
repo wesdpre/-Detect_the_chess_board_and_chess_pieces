@@ -53,6 +53,8 @@ def background_subtraction(image, square, show = False):
     masked_image = cv2.bitwise_and(image, image, mask=mask)
     if show:
         # Display the images
+        image = cv2.resize(image, (800, 600))
+        masked_image = cv2.resize(masked_image, (800, 600))
         cv2.imshow("Original Image", image)
         cv2.imshow("Masked Image", masked_image)
         cv2.waitKey(0)
@@ -96,7 +98,8 @@ def crop_chessboard(image, square, show = False, save= False):
     cropped_rotated_image = rotated_image[y:y + h, x:x + w]
 
     if save:
-        cv2.imwrite('cropped_rotated_image.jpg', cropped_rotated_image)
+        path = os.path.join('images', 'auxiliary_data', 'cropped_rotated_image.jpg')
+        cv2.imwrite(path, cropped_rotated_image)
 
     if show:
         # Display the images
