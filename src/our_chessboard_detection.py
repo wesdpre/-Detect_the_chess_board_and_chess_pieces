@@ -134,7 +134,7 @@ def getting_contours(image, show = False):
         approx = cv2.approxPolyDP(cnt, epsilon, True)
         if len(approx) == 4 and cv2.isContourConvex(approx):
             area = cv2.contourArea(cnt)
-            if area > 50000:  # This is the area threshold of ouw chessboard
+            if area > 500:  # This is the area threshold of ouw chessboard
                 squares.append(approx)
 
     print(f"Number of squares detected: {len(squares)}")
@@ -143,7 +143,7 @@ def getting_contours(image, show = False):
     if show:
         
         image_detected = image.copy()
-        cv2.drawContours(image_detected, squares, -1, (0, 0, 255), 20)
+        cv2.drawContours(image_detected, squares, -1, (0, 0, 255), 10)
         # Show result
 
         plt.figure(figsize=(10, 5))
@@ -157,7 +157,7 @@ def getting_contours(image, show = False):
         plt.title("Detected Squares")
         plt.axis("off")
 
-        plt.subplot(1, 2, 2)
+        plt.subplot(1, 2, 1)
         plt.imshow(edges)
         plt.title("edges")
         plt.axis("off")
@@ -167,15 +167,27 @@ def getting_contours(image, show = False):
 
 if __name__ == "__main__":
     # Getting contours
+
+
+
     dataDir = 'images'
-    image = cv2.imread(os.path.join(dataDir, "42", 'G042_IMG000.jpg'))# Change this, according to your image's path
-    image2 = image.copy()
-    square = getting_contours(image, show=False)
+    image = cv2.imread(os.path.join(dataDir, "42", 'G042_IMG086.jpg'))# Change this, according to your image's path
+    
+    imgage = cv2.imread(os.path.join(dataDir, "42", 'G042_IMG086.jpg'))
+    gray_image=cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+
+    # Apply Canny filter
+    image_canny = cv2.Canny(imgage, 50, 200)
+
+    # Create RGB copy of image
+    rgb_image = cv2.cvtColor(imgage, cv2.COLOR_BGR2RGB)
+
+    square = getting_contours(image, show=True)
 
     # Assuming we want to crop the first detected square
 
-    image2 = background_subtraction(image2, square, show=False)
+    #image2 = background_subtraction(image2, square, show=False)
 
     # this saves the image as cropped_rotated_image.jpg
-    cropped_rotated_image, rotated_square = crop_chessboard(image2, square, show=False)
-    homography_transformation(image, cropped_rotated_image, show=True)
+    #cropped_rotated_image, rotated_square = crop_chessboard(image2, square, show=False)
+    #homography_transformation(image, cropped_rotated_image, show=True)
