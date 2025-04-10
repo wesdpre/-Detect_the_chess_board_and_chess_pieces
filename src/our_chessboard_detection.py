@@ -3,34 +3,57 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Params
+margin = 28
 side = 400
+square_size = (side - 2 * margin) // 8
+
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
 
 def adjust_gamma(image, gamma=1.0):
     inv_gamma = 1.0 / gamma
     table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)]).astype("uint8")
     return cv2.LUT(image, table)
 
-def apply_filters(image, show = False):
+
+def apply_filters(image, show=False):
     # Convert to grayscale
-    gray_image=cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
-    # gaussian blur
-    # Apply Gaussian blur
-    # to reduce noise and improve corner detection
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Gaussian blur
     blurred = cv2.GaussianBlur(gray_image, (5, 5), 0)
+
     # Apply Canny filter
     image_canny = cv2.Canny(gray_image, 50, 200)
 
+    # Darken the image
     image_dark = adjust_gamma(image, 0.2)
     gray_dark = cv2.cvtColor(image_dark, cv2.COLOR_BGR2GRAY)
-    blurred_dark = cv2.GaussianBlur(gray_dark, (11,11), 0)
+    blurred_dark = cv2.GaussianBlur(gray_dark, (11, 11), 0)
     image_canny_dark = cv2.Canny(blurred_dark, 0, 140)
 
     if show:
-        # Display images
-        plt.subplot(221), plt.imshow(image), plt.title('Original Image')
-        plt.subplot(222), plt.imshow(image_canny, cmap='gray'), plt.title('Canny Image')
-        plt.subplot(223), plt.imshow(gray_dark, cmap='gray'), plt.title('Dark Gray Image')
-        plt.subplot(224), plt.imshow(image_canny_dark, cmap='gray'), plt.title('Dark Canny Image')
+
+        # Create subplots and disable axes individually
+        fig, axes = plt.subplots(1, 4, figsize=(20, 8))
+        axes[0].imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        axes[0].set_title('Original Image')
+        axes[0].axis('off')  # Turn off axis for this subplot
+        axes[1].imshow(cv2.cvtColor(image_canny, cv2.COLOR_GRAY2RGB))
+        axes[1].set_title('Canny Image')
+        axes[1].axis('off')  # Turn off axis for this subplot
+        axes[2].imshow(cv2.cvtColor(gray_dark, cv2.COLOR_GRAY2RGB))
+        axes[2].set_title('Dark Gray Image')
+        axes[2].axis('off')  # Turn off axis for this subplot
+        axes[3].imshow(cv2.cvtColor(image_canny_dark, cv2.COLOR_GRAY2RGB))
+        axes[3].set_title('Dark Canny Image')
+        axes[3].axis('off')  # Turn off axis for this subplot
+        # Adjust space between subplots
+        plt.subplots_adjust(hspace=0.3, wspace=0.3)
+        # Show the plot
         plt.show()
 
     return {
@@ -43,7 +66,6 @@ def apply_filters(image, show = False):
         'blurred_dark': blurred_dark,
         'image_canny_dark': image_canny_dark
     }
-
 
 
 def get_contours(image = {}, show = False, kernel_size = (5, 5), kernel_usage = False, iterations = 1):
@@ -95,49 +117,91 @@ def get_contours(image = {}, show = False, kernel_size = (5, 5), kernel_usage = 
 
     return squares
 
-def rotate_and_crop(image = None, square = None, show = False):
+
+def rotate_and_crop(image=None, square=None, show=False):
     # Order the 4 points: top-left, top-right, bottom-right, bottom-left
     pts = square.reshape(4, 2)
 
     # Define destination points for the warp
-    
     dst = np.array([[0, 0], [side - 1, 0], [side - 1, side - 1], [0, side - 1]], dtype='float32')
 
     # Compute the transform matrix and warp
     M = cv2.getPerspectiveTransform(np.float32(pts), dst)
-    warped = cv2.flip(cv2.warpPerspective(image['original_image'], M, (side, side)), 1) 
+    warped = cv2.flip(cv2.warpPerspective(image['original_image'], M, (side, side)), 1)
 
     # Display the warped image
     if show:
-        plt.subplot(121), plt.imshow(image['original_image']), plt.title('Original Image')
-        plt.subplot(122), plt.imshow(warped), plt.title('Warped Image')
+        fig, axes = plt.subplots(1, 2, figsize=(10, 6))
+
+        axes[0].imshow(cv2.cvtColor(image['original_image'], cv2.COLOR_BGR2RGB))
+        axes[0].set_title('Original Image')
+        axes[0].axis('off')
+        axes[1].imshow(cv2.cvtColor(warped, cv2.COLOR_BGR2RGB))
+        axes[1].set_title('Warped Image')
+        axes[1].axis('off')
         plt.show()
-    
+
     return warped
 
 
 def chesboard_grids(warped_image, show = False):
-    margin = 28
-    square_size = (side-2*margin)//8
-    img_copy = warped_image.copy()
+    img_grid = warped_image.copy()
+
     for i in range(9):
         x = margin + i * square_size
-        cv2.line(img_copy, (x, margin), (x, margin + 8 * square_size), (0, 255, 0), 2)
+        cv2.line(img_grid, (x, margin), (x, margin + 8 * square_size), (0, 255, 0), 2)
 
     # Draw horizontal lines
     for i in range(9):
         y = margin + i * square_size
-        cv2.line(img_copy, (margin, y), (margin + 8 * square_size, y), (0, 255, 0), 2)
+        cv2.line(img_grid, (margin, y), (margin + 8 * square_size, y), (0, 255, 0), 2)
 
     if show:
-        plt.subplot(121), plt.imshow(img_copy), plt.title('image with grid')
+        plt.figure(figsize=(10,5))
+        plt.imshow(cv2.cvtColor(img_grid, cv2.COLOR_BGR2RGB))
+        plt.title('Image with grid')
+        plt.axis('off')
         plt.show()
 
+    return img_grid
+
+
+def display_chessboard_squares(warped):
+
+    img_grid = warped.copy()
+    squares = []
+    # Extract each square from the grid
+    for row in range(8):
+        for col in range(8):
+            # Coordiantes of squares
+            x1 = margin + col * square_size
+            y1 = margin + row * square_size
+            x2 = x1 + square_size
+            y2 = y1 + square_size
+
+            # Crop the square from the image
+            square = warped[y1:y2, x1:x2]
+            # Convert the square from BGR to RGB (for matplotlib)
+            square_rgb = cv2.cvtColor(square, cv2.COLOR_BGR2RGB)
+            # Append the square to the list of squares
+            squares.append(square_rgb)
+
+    # Create an 8x8 grid plot using matplotlib
+    fig, axes = plt.subplots(8, 8, figsize=(10, 10))
+    for i, ax in enumerate(axes.flatten()):
+        ax.imshow(squares[i])
+        ax.axis('off')
+        ax.set_title(f"{i}", fontsize=10)
+        
+    plt.subplots_adjust(wspace=0.5, hspace=0.5)
+    plt.show()
+
+    return squares
 
 
 if __name__ == "__main__":
     # Load the image
-    
+
     image = cv2.imread('/Users/santiagoromero/Documents/cv/-Detect_the_chess_board_and_chess_pieces/images/G078_IMG092.jpg')
 
 
