@@ -127,7 +127,7 @@ def rotate_and_crop(image=None, square=None, show=False):
 
     # Compute the transform matrix and warp
     M = cv2.getPerspectiveTransform(np.float32(pts), dst)
-    warped = cv2.flip(cv2.warpPerspective(image['original_image'], M, (side, side)), 1)
+    warped = cv2.warpPerspective(image['original_image'], M, (side, side))
 
     # Display the warped image
     if show:
@@ -143,7 +143,63 @@ def rotate_and_crop(image=None, square=None, show=False):
 
     return warped, M
 
-def inverse_rotate_crop(warped=None, M=None, original_image=None, show=False):
+def count_black_pixels(image, corner, radius):
+    """
+    Count the number of black pixels in a given radius around a specified corner.
+    """
+    x, y = corner
+    # Crop a region around the corner within the radius
+    x_start = max(0, x - radius)
+    y_start = max(0, y - radius)
+    x_end = min(image.shape[1], x + radius)
+    y_end = min(image.shape[0], y + radius)
+
+    roi = image[y_start:y_end, x_start:x_end]
+    black_pixels = np.sum(roi < 50)  # Threshold to detect black pixels (near zero intensity)
+    return black_pixels
+
+def rotate_board(image, angle):
+    """
+    Rotate the image around the center by the specified angle.
+    """
+    center = (image.shape[1] // 2, image.shape[0] // 2)
+    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+    (h, w) = image.shape[:2]
+    # Calculate the new size of the rotated image
+    new_w = int(w * np.abs(rotation_matrix[0, 0]) + h * np.abs(rotation_matrix[0, 1]))
+    new_h = int(h * np.abs(rotation_matrix[0, 0]) + w * np.abs(rotation_matrix[0, 1]))
+    
+    # Adjust the rotation matrix to ensure the image fits within the new size
+    rotation_matrix[0, 2] += (new_w - w) / 2
+    rotation_matrix[1, 2] += (new_h - h) / 2
+    
+    rotated_image = cv2.warpAffine(image, rotation_matrix, (new_w, new_h))
+    return rotated_image
+
+def align_board(image, radius=20, angle_step=1):
+    """
+    Rotate the image to find the best angle where the bottom-left corner contains the most black pixels.
+    """
+    max_black_pixels = 0
+    best_angle = 0
+
+    corner = (0,0)
+
+    # Get the center of the image
+
+    # Rotate the image from 0 to 360 degrees in small steps
+    for angle in range(0, 360, angle_step):
+        rotated_image = rotate_board(image, angle)
+        black_pixels = count_black_pixels(rotated_image, corner, radius)
+        if black_pixels > max_black_pixels:
+            max_black_pixels = black_pixels
+            best_angle = angle
+    
+    # Rotate the image to the best angle found
+    final_rotated_image = rotate_board(image, best_angle)
+    return final_rotated_image, best_angle
+
+def inverse_rotate_crop(warped=None, M=None, angle=None, original_image=None, show=False):
     """
     Overlays the unwarped content back onto the original image,
     preserving the original context.
@@ -158,13 +214,13 @@ def inverse_rotate_crop(warped=None, M=None, original_image=None, show=False):
     - result: The original image with the warped content overlaid.
     """
 
-    if M is None or warped is None or original_image is None:
-        raise ValueError("Missing required parameters: 'warped', 'M', or 'original_image'")
+    if M is None or warped is None or original_image is None or angle is None:
+        raise ValueError("Missing required parameters: 'warped', 'M', 'original_image' or 'angle'")
+
+    warped = rotate_board(warped, (360-angle) % 360)
 
     h, w = original_image.shape[:2]
     M_inv = np.linalg.inv(M)
-
-    warped = cv2.flip(warped, 1)
 
     # Warp the content back to original shape
     unwarped = cv2.warpPerspective(warped, M_inv, (w, h))
