@@ -141,7 +141,62 @@ def rotate_and_crop(image=None, square=None, show=False):
         axes[1].axis('off')
         plt.show()
 
-    return warped
+    return warped, M
+
+def inverse_rotate_crop(warped=None, M=None, original_image=None, show=False):
+    """
+    Overlays the unwarped content back onto the original image,
+    preserving the original context.
+
+    Parameters:
+    - warped: The warped image (square cropped and perspective-corrected).
+    - M: Perspective matrix used for warping.
+    - original_image: The original full image.
+    - show: Whether to display the result.
+
+    Returns:
+    - result: The original image with the warped content overlaid.
+    """
+
+    if M is None or warped is None or original_image is None:
+        raise ValueError("Missing required parameters: 'warped', 'M', or 'original_image'")
+
+    h, w = original_image.shape[:2]
+    M_inv = np.linalg.inv(M)
+
+    warped = cv2.flip(warped, 1)
+
+    # Warp the content back to original shape
+    unwarped = cv2.warpPerspective(warped, M_inv, (w, h))
+
+    # Create a mask of the unwarped image (non-black area)
+    gray_unwarped = cv2.cvtColor(unwarped, cv2.COLOR_BGR2GRAY)
+    _, mask = cv2.threshold(gray_unwarped, 1, 255, cv2.THRESH_BINARY)
+
+    # Invert mask to get the background of the original image
+    mask_inv = cv2.bitwise_not(mask)
+
+    # Convert mask to 3-channel
+    mask_3ch = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+    mask_inv_3ch = cv2.cvtColor(mask_inv, cv2.COLOR_GRAY2BGR)
+
+    # Keep only the original background where unwarped won't be applied
+    background = cv2.bitwise_and(original_image, mask_inv_3ch)
+
+    # Keep only the unwarped foreground
+    foreground = cv2.bitwise_and(unwarped, mask_3ch)
+
+    # Combine the two
+    result = cv2.add(background, foreground)
+
+    if show:
+        plt.figure(figsize=(10, 6))
+        plt.imshow(cv2.cvtColor(result, cv2.COLOR_BGR2RGB))
+        plt.title("Original Image with Inverse Warped Content Overlaid")
+        plt.axis('off')
+        plt.show()
+
+    return result
 
 
 def chesboard_grids(warped_image, show = False):
