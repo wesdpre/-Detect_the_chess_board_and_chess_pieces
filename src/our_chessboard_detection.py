@@ -143,19 +143,26 @@ def rotate_and_crop(image=None, square=None, show=False):
 
     return warped, M
 
-def count_black_pixels(image, corner, radius):
+step = 0
+def count_black_pixels(image, corner, radius, debug=True):
     """
     Count the number of black pixels in a given radius around a specified corner.
     """
+    global step
     x, y = corner
     # Crop a region around the corner within the radius
-    x_start = max(0, x - radius)
-    y_start = max(0, y - radius)
-    x_end = min(image.shape[1], x + radius)
-    y_end = min(image.shape[0], y + radius)
+    x_start = max(0, x)
+    y_start = max(0, y)
+    x_end = min(image.shape[1], x_start + 2*radius)
+    y_end = min(image.shape[0], y_start + 2*radius)
 
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     roi = image[y_start:y_end, x_start:x_end]
-    black_pixels = np.sum(roi < 50)  # Threshold to detect black pixels (near zero intensity)
+
+    if debug:
+        cv2.imwrite('test_' + str(radius)  + '_' + str(step) +'.jpg', roi)
+        step += 1
+    black_pixels = np.sum(roi < 200)  # Threshold to detect black pixels (near zero intensity)
     return black_pixels
 
 def rotate_board(image, angle):
@@ -190,7 +197,11 @@ def align_board(image, radius=20, angle_step=1):
     # Rotate the image from 0 to 360 degrees in small steps
     for angle in range(0, 360, angle_step):
         rotated_image = rotate_board(image, angle)
+        print('Angle')
+        print(angle)
         black_pixels = count_black_pixels(rotated_image, corner, radius)
+        print('Px Count')
+        print(black_pixels)
         if black_pixels > max_black_pixels:
             max_black_pixels = black_pixels
             best_angle = angle
