@@ -143,12 +143,10 @@ def rotate_and_crop(image=None, square=None, show=False):
 
     return warped, M
 
-step = 0
-def count_black_pixels(image, corner, radius, debug=True):
+def count_black_pixels(image, corner, radius, debug=False):
     """
     Count the number of black pixels in a given radius around a specified corner.
     """
-    global step
     x, y = corner
     # Crop a region around the corner within the radius
     x_start = max(0, x)
@@ -159,9 +157,6 @@ def count_black_pixels(image, corner, radius, debug=True):
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     roi = image[y_start:y_end, x_start:x_end]
 
-    if debug:
-        cv2.imwrite('test_' + str(radius)  + '_' + str(step) +'.jpg', roi)
-        step += 1
     black_pixels = np.sum(roi < 200)  # Threshold to detect black pixels (near zero intensity)
     return black_pixels
 
