@@ -316,6 +316,225 @@ def display_chessboard_squares(warped):
     return squares
 
 
+def adjust_gamma(image, gamma=1.0):
+    inv_gamma = 1.0 / gamma
+    table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)]).astype("uint8")
+    return cv2.LUT(image, table)
+
+def adjust_contrast(image, alpha=1.5, beta=0):
+    adjusted = cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
+    return adjusted
+
+def normalize_white_pieces(square_rgb):
+    hsv = cv2.cvtColor(square_rgb, cv2.COLOR_RGB2HSV)
+    h, s, v = cv2.split(hsv)
+    mask = (
+        (h >= 15) & (h <= 45) &
+        (s >= 15) & (s <= 200) &
+        (v >= 100) & (v <= 240)
+    )
+    hsv[mask] = (30, 180, 200)
+    return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+
+def display_chessboard_squares(warped, gamma=1.5):
+    img_grid = warped.copy()
+    squares = []
+
+    for row in range(8):
+        for col in range(8):
+            x1 = margin + col * square_size
+            y1 = margin + row * square_size
+            x2 = x1 + square_size
+            y2 = y1 + square_size
+
+            square = warped[y1:y2, x1:x2]
+            square_rgb = cv2.cvtColor(square, cv2.COLOR_BGR2RGB)
+            image_light = adjust_gamma(square_rgb, gamma)
+            image_norm = normalize_white_pieces(image_light)
+            image_contrast = adjust_contrast(image_norm, alpha=1.3, beta=0)
+            image_filtered = cv2.medianBlur(image_contrast, 5)
+            squares.append(image_filtered)
+
+    fig, axes = plt.subplots(8, 8, figsize=(10, 10))
+    for i, ax in enumerate(axes.flatten()):
+        ax.imshow(squares[i])
+        ax.axis('off')
+        ax.set_title(f"{i}", fontsize=10)
+
+    plt.subplots_adjust(wspace=0.5, hspace=0.5)
+    plt.show()
+
+    return squares
+
+def check_piece_at_center(square, black_piece=(45, 45, 45), white_piece=(255, 252, 94), atol=50):
+    # Flatten and calculate average color around center for initial classification
+    center_x = square.shape[1] // 2
+    center_y = square.shape[0] // 2
+    crop_size = 3
+    crop_x1 = max(center_x - crop_size // 2, 0)
+    crop_y1 = max(center_y - crop_size // 2, 0)
+    crop_x2 = min(center_x + crop_size // 2 + 1, square.shape[1])
+    crop_y2 = min(center_y + crop_size // 2 + 1, square.shape[0])
+    cropped_region = square[crop_y1:crop_y2, crop_x1:crop_x2]
+    avg_color = np.mean(cropped_region, axis=(0, 1))
+
+    # Determine expected color
+    if np.allclose(avg_color, white_piece, atol=atol):
+        target_color = white_piece
+        label = "WHITE"
+    elif np.allclose(avg_color, black_piece, atol=atol):
+        target_color = black_piece
+        label = "BLACK"
+    else:
+        return "EMPTY", None
+
+    # Find all pixels in the square close to the target color
+    mask = np.all(np.isclose(square, target_color, atol=atol), axis=-1)
+    ys, xs = np.where(mask)
+
+    if len(xs) == 0 or len(ys) == 0:
+        return label, None  # No matching pixels found
+
+    xmin = int(np.min(xs))
+    xmax = int(np.max(xs))
+    ymin = int(np.min(ys))
+    ymax = int(np.max(ys))
+
+    return label, (xmin, ymin, xmax, ymax)
+
+def process_chessboard(squares):
+    board_matrix = np.zeros((8, 8))
+    white_count = 0
+    black_count = 0
+    piece_coords = []
+
+    for i in range(8):
+        for j in range(8):
+            square = squares[i * 8 + j]
+
+            # Check the piece at the center of the square and get its local bounding box
+            piece_type, local_box = check_piece_at_center(square)
+
+            if piece_type in {"WHITE", "BLACK"}:
+                board_matrix[i, j] = 1
+
+                if piece_type == "WHITE":
+                    white_count += 1
+                elif piece_type == "BLACK":
+                    black_count += 1
+
+                if local_box is not None:
+                    # Local coordinates within the square (no offset)
+                    piece_coords.append({
+                        "xmin": int(local_box[0]),
+                        "ymin": int(local_box[1]),
+                        "xmax": int(local_box[2]),
+                        "ymax": int(local_box[3])
+                    })
+
+    # Output (optional)
+    print("Board Matrix (8x8):")
+    print(board_matrix)
+    print(f"White pieces: {white_count}")
+    print(f"Black pieces: {black_count}")
+
+    return board_matrix, piece_coords
+
+def reverse_piece_coordinates(piece_coords, rotation_angle, perspective_matrix, rotated_image_shape):
+    """
+    Reverses perspective and rotation transforms to map piece bounding boxes
+    back to coordinates in the original image.
+
+    Args:
+        piece_coords: list of dicts with keys 'xmin', 'xmax', 'ymin', 'ymax'
+        rotation_angle: angle used to rotate the warped image
+        perspective_matrix: M used for perspective warp (cv2.getPerspectiveTransform)
+        rotated_image_shape: shape of the rotated (aligned) image
+
+    Returns:
+        A list of dictionaries with original image coordinates using the same bounding box keys.
+    """
+    h_rot, w_rot = rotated_image_shape[:2]
+    center = (w_rot // 2, h_rot // 2)
+
+    # Create inverse rotation matrix
+    R = cv2.getRotationMatrix2D(center, rotation_angle, 1.0)
+    R_3x3 = np.vstack([R, [0, 0, 1]])
+    R_inv = np.linalg.inv(R_3x3)
+
+    # Collect all corner points from bounding boxes
+    all_points = []
+    box_indices = []
+
+    for idx, box in enumerate(piece_coords):
+        corners = [
+            [box['xmin'], box['ymin']],
+            [box['xmax'], box['ymin']],
+            [box['xmax'], box['ymax']],
+            [box['xmin'], box['ymax']]
+        ]
+        all_points.extend(corners)
+        box_indices.extend([idx] * 4)
+
+    # Apply inverse rotation
+    points_np = np.array(all_points, dtype=np.float32)
+    points_hom = np.hstack([points_np, np.ones((len(points_np), 1))])
+    coords_in_warped = (R_inv @ points_hom.T).T[:, :2]
+
+    # Apply inverse perspective
+    M_inv = np.linalg.inv(perspective_matrix)
+    coords_in_warped = np.array(coords_in_warped, dtype=np.float32).reshape(-1, 1, 2)
+    coords_in_original = cv2.perspectiveTransform(coords_in_warped, M_inv).reshape(-1, 2)
+
+    # Group back into box dictionaries
+    original_boxes = [{} for _ in range(len(piece_coords))]
+    for i in range(len(piece_coords)):
+        box_points = coords_in_original[i * 4: (i + 1) * 4]
+        x_vals = box_points[:, 0]
+        y_vals = box_points[:, 1]
+        original_boxes[i] = {
+            "xmin": int(np.min(x_vals)),
+            "ymin": int(np.min(y_vals)),
+            "xmax": int(np.max(x_vals)),
+            "ymax": int(np.max(y_vals))
+        }
+
+    return original_boxes
+
+def offset_piece_coords(piece_coords, board_matrix):
+    """
+    Converts local square-relative piece bounding boxes to global (warped image) coordinates
+    by applying offset based on the square's position on the 8x8 board.
+
+    Args:
+        piece_coords: list of dicts with keys 'xmin', 'ymin', 'xmax', 'ymax' (local to square)
+        board_matrix: 8x8 matrix with 1s where pieces are detected
+        margin: pixel offset around the board in the warped image
+        square_size: size of each square in pixels
+
+    Returns:
+        List of dicts with global (warped image) coordinates
+    """
+    global_coords = []
+    idx = 0  # index for piece_coords
+
+    for i in range(8):
+        for j in range(8):
+            if board_matrix[i, j] == 1:
+                local_box = piece_coords[idx]
+                offset_x = margin + j * square_size
+                offset_y = margin + i * square_size
+
+                global_coords.append({
+                    "xmin": local_box["xmin"] + offset_x,
+                    "ymin": local_box["ymin"] + offset_y,
+                    "xmax": local_box["xmax"] + offset_x,
+                    "ymax": local_box["ymax"] + offset_y
+                })
+                idx += 1
+
+    return global_coords
+
 if __name__ == "__main__":
     # Load the image
 
