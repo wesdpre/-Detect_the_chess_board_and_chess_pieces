@@ -13,6 +13,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+def read_image(image_path, show=False):
+    # Read the image
+    image = cv2.imread(image_path)
+
+    # Convert BGR to RGB
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    if show:
+        plt.imshow(image_rgb)
+        plt.axis('off')
+        plt.show()
+
+    return image
+
+
 def adjust_gamma(image, gamma=1.0):
     inv_gamma = 1.0 / gamma
     table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)]).astype("uint8")
@@ -178,7 +193,7 @@ def rotate_board(image, angle):
     rotated_image = cv2.warpAffine(image, rotation_matrix, (new_w, new_h))
     return rotated_image
 
-def align_board(image, radius=20, angle_step=1):
+def align_board(image, radius=20, angle_step=1, show=False):
     """
     Rotate the image to find the best angle where the bottom-left corner contains the most black pixels.
     """
@@ -203,6 +218,13 @@ def align_board(image, radius=20, angle_step=1):
     
     # Rotate the image to the best angle found
     final_rotated_image = rotate_board(image, best_angle)
+
+    if show:
+        plt.figure(figsize=(10, 6))
+        plt.imshow(cv2.cvtColor(final_rotated_image, cv2.COLOR_BGR2RGB))
+        plt.title(f"Best Angle: {best_angle} degrees")
+        plt.axis('off')
+        plt.show()
     return final_rotated_image, best_angle
 
 def inverse_rotate_crop(warped=None, M=None, angle=None, original_image=None, show=False):
@@ -283,7 +305,7 @@ def chesboard_grids(warped_image, show = False):
     return img_grid
 
 
-def display_chessboard_squares(warped):
+def display_chessboard_squares(warped, show=False):
 
     img_grid = warped.copy()
     squares = []
@@ -310,8 +332,9 @@ def display_chessboard_squares(warped):
         ax.axis('off')
         ax.set_title(f"{i}", fontsize=10)
         
-    plt.subplots_adjust(wspace=0.5, hspace=0.5)
-    plt.show()
+    if show:
+        plt.subplots_adjust(wspace=0.5, hspace=0.5)
+        plt.show()
 
     return squares
 
@@ -336,7 +359,7 @@ def normalize_white_pieces(square_rgb):
     hsv[mask] = (30, 180, 200)
     return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
 
-def display_chessboard_squares(warped, gamma=1.5):
+def display_chessboard_squares(warped, gamma=1.5, show= False):
     img_grid = warped.copy()
     squares = []
 
@@ -361,8 +384,9 @@ def display_chessboard_squares(warped, gamma=1.5):
         ax.axis('off')
         ax.set_title(f"{i}", fontsize=10)
 
-    plt.subplots_adjust(wspace=0.5, hspace=0.5)
-    plt.show()
+    if show:
+        plt.subplots_adjust(wspace=0.5, hspace=0.5)
+        plt.show()
 
     return squares
 
@@ -434,11 +458,15 @@ def process_chessboard(squares):
 
     # Output (optional)
     print("Board Matrix (8x8):")
+    # Convert board_matrix into common array
+    board_matrix = np.array(board_matrix, dtype=int)
     print(board_matrix)
     print(f"White pieces: {white_count}")
     print(f"Black pieces: {black_count}")
+    total_pieces = white_count + black_count
+    print(f"Total pieces: {total_pieces}")
 
-    return board_matrix, piece_coords
+    return board_matrix, piece_coords, total_pieces
 
 def reverse_piece_coordinates(piece_coords, rotation_angle, perspective_matrix, rotated_image_shape):
     """
