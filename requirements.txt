@@ -2,3 +2,7 @@
 # Install the required packages using pip
 opencv-python
 numpy
+matplotlib
+pandas
+jsonlib
+

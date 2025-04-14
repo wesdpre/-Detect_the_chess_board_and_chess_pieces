@@ -12,7 +12,6 @@ def process_image(image_path):
     chess_contour = get_contours(filtered_images, show=False,  kernel_size=(25,25) ,  kernel_usage=True, iterations=4)
     warped_image, M = rotate_and_crop(filtered_images, chess_contour[0][1], show=False)
     rotated_image, best_angle = align_board(warped_image, radius=12, angle_step=90, show=False)
-    grid_image = chesboard_grids(rotated_image, show = False)
     squares = display_chessboard_squares(rotated_image, show = False)
     board_matrix, piece_coords, pieces_count = process_chessboard(squares)
     piece_coords_global = offset_piece_coords(piece_coords, board_matrix,)
@@ -40,7 +39,7 @@ def process_image(image_path):
         "detected_pieces": original_coords_list
     }
 
-def generate_output(input_file_path, output_file_path='output.json'):
+def generate_output(input_file_path='input.json', output_file_path='output.json'):
     with open(input_file_path, 'r') as infile:
         data = json.load(infile)
 
@@ -74,6 +73,5 @@ class CompactBoardJSONEncoder(json.JSONEncoder):
 
 if __name__ == "__main__":
     # Example usage
-    # process_image('image.jpg')
     generate_output('json_requests/input.json', 'output.json')
 

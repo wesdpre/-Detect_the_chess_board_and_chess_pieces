@@ -8,11 +8,6 @@ margin = 28
 side = 400
 square_size = (side - 2 * margin) // 8
 
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
-
-
 def read_image(image_path, show=False):
     # Read the image
     image = cv2.imread(image_path)
@@ -562,25 +557,6 @@ def offset_piece_coords(piece_coords, board_matrix):
                 idx += 1
 
     return global_coords
-
-if __name__ == "__main__":
-    # Load the image
-
-    image = cv2.imread('/Users/santiagoromero/Documents/cv/-Detect_the_chess_board_and_chess_pieces/images/G078_IMG092.jpg')
-
-
-
-    # Apply filters
-    filtered_images = apply_filters(image, show=False)
-
-    # Get chessboard contour
-    chess_contour = get_contours(filtered_images, show=True,  kernel_size=(25,25) ,  kernel_usage=True, iterations=4)
-
-
-    # Rotate and crop the image
-    warped_image = rotate_and_crop(filtered_images, chess_contour[0][1], show=False)
-
-    chesboard_grids(warped_image, show = True)
 
 
 
