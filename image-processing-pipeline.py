@@ -46,7 +46,6 @@ def generate_output(input_file_path='input.json', output_file_path='output.json'
     results = []
     for image_path in data.get('image_files', []):
         result = process_image(image_path)
-        result['image'] = image_path
         results.append(result)
 
     with open(output_file_path, 'w') as outfile:
