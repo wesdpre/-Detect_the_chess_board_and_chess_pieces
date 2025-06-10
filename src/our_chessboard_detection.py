@@ -4,8 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Params
-margin = 28
-side = 400
+margin = 50
+side = 512
 square_size = (side - 2 * margin) // 8
 
 def read_image(image_path, show=False):
@@ -128,27 +128,68 @@ def get_contours(image = {}, show = False, kernel_size = (5, 5), kernel_usage = 
     return squares
 
 
-def rotate_and_crop(image=None, square=None, show=False):
-    # Order the 4 points: top-left, top-right, bottom-right, bottom-left
-    pts = square.reshape(4, 2)
+def order_points(pts):
+    """
+    Orders 4 points in the order: top-left, top-right, bottom-right, bottom-left
+    """
+    rect = np.zeros((4, 2), dtype="float32")
+    s = pts.sum(axis=1)
+    diff = np.diff(pts, axis=1)
 
-    # Define destination points for the warp
-    dst = np.array([[0, 0], [side - 1, 0], [side - 1, side - 1], [0, side - 1]], dtype='float32')
+    rect[0] = pts[np.argmin(s)]        # Top-left
+    rect[2] = pts[np.argmax(s)]        # Bottom-right
+    rect[1] = pts[np.argmin(diff)]     # Top-right
+    rect[3] = pts[np.argmax(diff)]     # Bottom-left
 
-    # Compute the transform matrix and warp
-    M = cv2.getPerspectiveTransform(np.float32(pts), dst)
+    return rect
+
+def rotate_and_crop(image=None, square=None, side=512, show=False):
+    """
+    Applies a perspective warp to the region defined by `square` in the `image`.
+    
+    Parameters:
+    - image: dictionary with key 'original_image' containing the BGR image (np.ndarray)
+    - square: array-like of 4 (x, y) points
+    - side: output size in pixels (square)
+    - show: if True, displays the original and warped images with corner labels
+    
+    Returns:
+    - warped image
+    - 3x3 homography matrix used
+    """
+    # Step 1: Ensure square is reshaped and ordered
+    pts = order_points(np.array(square).reshape(4, 2))
+
+    # Step 2: Define the destination points
+    dst = np.array([
+        [0, 0],
+        [side - 1, 0],
+        [side - 1, side - 1],
+        [0, side - 1]
+    ], dtype="float32")
+
+    # Step 3: Compute the homography
+    M = cv2.getPerspectiveTransform(pts, dst)
+
+    # Step 4: Warp the image
     warped = cv2.warpPerspective(image['original_image'], M, (side, side))
 
-    # Display the warped image
+    # Step 5: Optional visualization
     if show:
-        fig, axes = plt.subplots(1, 2, figsize=(10, 6))
+        debug_img = image['original_image'].copy()
+        for i, (x, y) in enumerate(pts):
+            cv2.circle(debug_img, (int(x), int(y)), 5, (0, 255, 0), -1)
+            cv2.putText(debug_img, f'{i}', (int(x), int(y) - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
-        axes[0].imshow(cv2.cvtColor(image['original_image'], cv2.COLOR_BGR2RGB))
-        axes[0].set_title('Original Image')
+        fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+        axes[0].imshow(cv2.cvtColor(debug_img, cv2.COLOR_BGR2RGB))
+        axes[0].set_title('Original with Points')
         axes[0].axis('off')
         axes[1].imshow(cv2.cvtColor(warped, cv2.COLOR_BGR2RGB))
-        axes[1].set_title('Warped Image')
+        axes[1].set_title('Warped (Rotated + Cropped)')
         axes[1].axis('off')
+        plt.tight_layout()
         plt.show()
 
     return warped, M
@@ -167,7 +208,7 @@ def count_black_pixels(image, corner, radius, debug=False):
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     roi = image[y_start:y_end, x_start:x_end]
 
-    black_pixels = np.sum(roi < 200)  # Threshold to detect black pixels (near zero intensity)
+    black_pixels = np.sum(roi < 150)  # Threshold to detect black pixels (near zero intensity)
     return black_pixels
 
 def rotate_board(image, angle):
@@ -186,33 +227,50 @@ def rotate_board(image, angle):
     rotation_matrix[1, 2] += (new_h - h) / 2
     
     rotated_image = cv2.warpAffine(image, rotation_matrix, (new_w, new_h))
-    return rotated_image
+    return rotated_image, rotation_matrix
 
 def align_board(image, radius=20, angle_step=1, show=False):
     """
     Rotate the image to find the best angle where the bottom-left corner contains the most black pixels.
+    Visualizes the region being analyzed during the process.
     """
     max_black_pixels = 0
     best_angle = 0
 
-    corner = (0,0)
+    corner = (0, 512 - 2 * radius)
 
-    # Get the center of the image
-
-    # Rotate the image from 0 to 360 degrees in small steps
     for angle in range(0, 360, angle_step):
-        rotated_image = rotate_board(image, angle)
+        rotated_image, M = rotate_board(image, angle)
         print('Angle')
         print(angle)
+
+        # Get region coordinates
+        x, y = corner
+        x_start = max(0, x)
+        y_start = max(0, y)
+        x_end = min(rotated_image.shape[1], x_start + 2*radius)
+        y_end = min(rotated_image.shape[0], y_start + 2*radius)
+
         black_pixels = count_black_pixels(rotated_image, corner, radius)
         print('Px Count')
         print(black_pixels)
         if black_pixels > max_black_pixels:
             max_black_pixels = black_pixels
             best_angle = angle
-    
-    # Rotate the image to the best angle found
-    final_rotated_image = rotate_board(image, best_angle)
+        
+        if show:
+            # Draw rectangle showing the region being analyzed
+            display_image = rotated_image.copy()
+            cv2.rectangle(display_image, (x_start, y_start), (x_end, y_end), (0, 255, 0), 2)
+
+            plt.figure(figsize=(10, 6))
+            plt.imshow(cv2.cvtColor(display_image, cv2.COLOR_BGR2RGB))
+            plt.title(f"Angle: {angle} degrees")
+            plt.axis('off')
+            plt.show()
+
+    # Rotate to best angle
+    final_rotated_image, M = rotate_board(image, best_angle)
 
     if show:
         plt.figure(figsize=(10, 6))
@@ -220,7 +278,8 @@ def align_board(image, radius=20, angle_step=1, show=False):
         plt.title(f"Best Angle: {best_angle} degrees")
         plt.axis('off')
         plt.show()
-    return final_rotated_image, best_angle
+
+    return final_rotated_image, M
 
 def inverse_rotate_crop(warped=None, M=None, angle=None, original_image=None, show=False):
     """
@@ -558,8 +617,78 @@ def offset_piece_coords(piece_coords, board_matrix):
 
     return global_coords
 
+import json
+
+from src.our_chessboard_detection import (read_image, apply_filters, get_contours, 
+                                      rotate_and_crop, align_board,chesboard_grids, 
+                                      process_chessboard, display_chessboard_squares,
+                                      offset_piece_coords, reverse_piece_coordinates)
+
+def process_image(image_path):
+
+    image = read_image(image_path, False)
+    filtered_images = apply_filters(image, False)
+    chess_contour = get_contours(filtered_images, show=False,  kernel_size=(25,25) ,  kernel_usage=True, iterations=4)
+    warped_image, M = rotate_and_crop(filtered_images, chess_contour[0][1], show=False)
+    rotated_image, best_angle = align_board(warped_image, radius=12, angle_step=90, show=False)
+    squares = display_chessboard_squares(rotated_image, show = False)
+    board_matrix, piece_coords, pieces_count = process_chessboard(squares)
+    piece_coords_global = offset_piece_coords(piece_coords, board_matrix,)
+
+    # Reverse transforms
+    original_coords = reverse_piece_coordinates(
+        piece_coords_global,
+        rotation_angle=best_angle,  # from align_board
+        perspective_matrix=M,       # from rotate_and_crop
+        rotated_image_shape=rotated_image.shape
+    )
+    print(original_coords)
+
+
+    # Convert the board matrix to a compact nested list format
+    board_matrix_list = board_matrix.tolist()
+
+    # Convert original_coords to a JSON-serializable format
+    original_coords_list = [dict(coord) for coord in original_coords]
+
+    return {
+        "image_path": image_path,
+        "num_pieces": pieces_count,
+        "board": board_matrix_list,
+        "detected_pieces": original_coords_list
+    }
+
+def generate_output(input_file_path='input.json', output_file_path='output.json'):
+    with open(input_file_path, 'r') as infile:
+        data = json.load(infile)
+
+    results = []
+    for image_path in data.get('image_files', []):
+        result = process_image(image_path)
+        results.append(result)
+
+    with open(output_file_path, 'w') as outfile:
+        json.dump(results, outfile, cls=CompactBoardJSONEncoder)
 
 
 
+import json
 
-    
+class CompactBoardJSONEncoder(json.JSONEncoder):
+    def __init__(self, *args, **kwargs):
+        kwargs['indent'] = 4  # Still keep overall formatting
+        super().__init__(*args, **kwargs)
+
+    def encode(self, o):
+        if isinstance(o, list):
+            # Compact encoding for lists of integers
+            if all(isinstance(i, list) and all(isinstance(j, int) for j in i) for i in o):
+                return "[\n" + ",\n".join(
+                    ["    " + json.dumps(row) for row in o]
+                ) + "\n]"
+        return super().encode(o)
+
+
+if __name__ == "__main__":
+    # Example usage
+    generate_output('json_requests/input.json', 'output.json')
