@@ -6,10 +6,7 @@ import numpy as np
 
 def convert_to_yolo_dataset(
     root_dir,
-    output_dir='yolo_dataset',
-    train_ratio=0.7,
-    val_ratio=0.2,
-    test_ratio=0.1
+    output_dir='yolo_dataset'
 ):
     # load anotation
     annotations_path = os.path.join(root_dir, 'annotations.json')
@@ -103,5 +100,4 @@ names:
     with open(output_dir / 'dataset.yaml', 'w') as f:
         f.write(yaml_content)
 
-# Uso:
 convert_to_yolo_dataset('')
