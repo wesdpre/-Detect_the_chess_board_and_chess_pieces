@@ -2,10 +2,10 @@ task: detect
 mode: train
 model: yolo11n.pt
 data: yolo_dataset/dataset.yaml
-epochs: 100
+epochs: 15
 time: null
-patience: 10
-batch: 8
+patience: 5
+batch: 5
 imgsz: 640
 save: true
 save_period: -1
